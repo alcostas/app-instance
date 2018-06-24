@@ -1,5 +1,5 @@
-group 'app-fresh'
-version '1.0-SNAPSHOT'
+group 'app-instance'
+version '1.0.1'
 
 apply plugin: 'java'
 
