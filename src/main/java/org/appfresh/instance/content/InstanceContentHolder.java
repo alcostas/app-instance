@@ -1,13 +1,15 @@
 package org.appfresh.instance.content;
 
+import java.util.Map;
+
 /**
  * Content to initiate instance by configuration
  */
 public final class InstanceContentHolder {
 
-    private static InstanceContext context;
+    private final InstanceContext context;
 
-    public static void initInstanceContext(InstanceContext instanceContext) {
+    public InstanceContentHolder(InstanceContext instanceContext) {
         context = instanceContext;
     }
 
@@ -21,6 +23,10 @@ public final class InstanceContentHolder {
 
     public <T> void injectInstances(T target) {
         context.injectInstance(target);
+    }
+
+    public void initiateConfigClassReferences(Map<String, Object> references) {
+        context.initiateConfigClassReferences(references);
     }
 
 }

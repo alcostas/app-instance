@@ -3,11 +3,13 @@ package org.appfresh.instance.content;
 import android.os.Build;
 import org.appfresh.cache.InstanceMapping;
 import org.appfresh.exception.InvalidInstanceException;
+import org.appfresh.instance.annotation.ConfigurationReference;
 import org.appfresh.instance.annotation.InjectInstance;
 import org.appfresh.instance.annotation.Instance;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.util.Map;
 
 import static java.lang.String.format;
 import static org.appfresh.instance.enums.InstanceScope.SINGLETON;
@@ -18,12 +20,12 @@ import static org.appfresh.instance.enums.InstanceScope.SINGLETON;
  */
 public class InstanceContext {
 
-    private Class configClass;
+    private Object configClass;
     private int SDK_VERSION = Build.VERSION.SDK_INT;
     private final InstanceMapping mapping;
 
-    protected InstanceContext(Class configHolder) {
-        this.configClass = configHolder;
+    protected InstanceContext(Class configHolder) throws IllegalAccessException, InstantiationException {
+        this.configClass = configHolder.newInstance();
         this.mapping = new InstanceMapping();
     }
 
@@ -36,7 +38,7 @@ public class InstanceContext {
      * @return the instance by given configs
      */
     public <T> T getInstance(Class sourceClass) {
-        return initiateInstance(sourceClass.getName());
+        return initiateInstance(sourceClass);
     }
 
     /**
@@ -52,25 +54,54 @@ public class InstanceContext {
     }
 
     /**
+     * Set up values for config class
+     * NOTE all fields should be static
+     */
+    public void initiateConfigClassReferences(Map<String, Object> references) {
+        Field[] fields = configClass.getClass().getDeclaredFields();
+        for (Field field : fields) {
+            ConfigurationReference configReference = field.getAnnotation(ConfigurationReference.class);
+            if (configReference != null) {
+                String reference = configReference.referenceName();
+                Object instance = references.get(reference);
+                if (instance != null) {
+                    boolean accessibility = field.isAccessible();
+                    field.setAccessible(true);
+                    try {
+                        field.set(configClass, instance);
+                    } catch (IllegalAccessException e) {
+                        throw new InvalidInstanceException(format("Instance reference can not be applied for reference %s", reference));
+                    }
+                    field.setAccessible(accessibility);
+                } else {
+                    throw new InvalidInstanceException(format("Instance reference is not present for field with reference name %s", reference));
+                }
+            }
+        }
+    }
+
+    /**
      * Initialize instance by target
      *
      * @param target used to get instance
      * @param <T> the required instance
      * @return the instance by given configs
      */
-    private <T> T initiateInstance(String target) {
+    private <R, T> R initiateInstance(T target) {
         try {
-            Object mapping = this.mapping.getInstanceMapping(target);
-            if (mapping != null) {
-                if (mapping instanceof Method) {
-                    return (T) ((Method) mapping).invoke(configClass);
+            String targetName = target instanceof String ?
+                    (String) target : ((Class) target).getName();
+            Object mappedCache = this.mapping.getInstanceMapping(targetName);
+            if (mappedCache != null) {
+                if (mappedCache instanceof Method) {
+                    return (R) ((Method) mappedCache).invoke(configClass);
                 } else {
-                    return (T) mapping;
+                    return (R) mappedCache;
                 }
             } else {
                 int version = 0;
                 Method instanceMethod = null;
-                Method[] configMethods = configClass.getDeclaredMethods();
+                Method[] configMethods = configClass.getClass().getDeclaredMethods();
                 for (Method method : configMethods) {
                     Instance config = method.getAnnotation(Instance.class);
                     if (isValidConfigInstance(config, target, version)) {
@@ -81,15 +112,15 @@ public class InstanceContext {
                 Instance config = instanceMethod.getAnnotation(Instance.class);
                 Object instance = instanceMethod.invoke(configClass);
                 if (config.scope().equals(SINGLETON)) {
-                    this.mapping.setInstanceMapping(target, instance);
+                    this.mapping.setInstanceMapping(targetName, instance);
                 } else {
-                    this.mapping.setInstanceMapping(target, instanceMethod);
+                    this.mapping.setInstanceMapping(targetName, instanceMethod);
                 }
-                return (T) instance;
+                return (R) instance;
             }
         } catch (NullPointerException e) {
             throw new InvalidInstanceException(format("Unable to initiate reference for class %s during the " +
-                    "missing instance config from config source %s", target, configClass.getName()));
+                    "missing instance config from config source %s", target, configClass.getClass().getName()));
         } catch (Exception e) {
             throw new InvalidInstanceException(format("Unable to initiate reference " +
                     "for class %s with cause %s", target, e.getMessage()), e);
@@ -114,7 +145,7 @@ public class InstanceContext {
                     if (!qualifier.equals("")) {
                         field.set(target, getInstance(qualifier));
                     } else {
-                        field.set(target, getInstance(target.getClass()));
+                        field.set(target, getInstance(field.getType()));
                     }
                     field.setAccessible(accessibility);
                 }
@@ -134,7 +165,7 @@ public class InstanceContext {
      * @return if config is satisfied for required instance
      */
     private boolean isValidConfigInstance(Instance config, Object source, int version) {
-        if (source == null) return false;
+        if (source == null || config == null) return false;
         Object value = source instanceof String ? config.qualifier() : config.instance();
         return source.equals(value) && satisfiedSdkVersion(config, version);
     }
