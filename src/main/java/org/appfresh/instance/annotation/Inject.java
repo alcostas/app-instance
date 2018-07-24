@@ -13,7 +13,7 @@ import static java.lang.annotation.RetentionPolicy.RUNTIME;
  */
 @Target(FIELD)
 @Retention(RUNTIME)
-public @interface InjectInstance {
+public @interface Inject {
 
     String qualifier() default StringUtils.EMPTY;
 

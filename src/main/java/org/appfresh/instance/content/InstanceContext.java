@@ -4,7 +4,7 @@ import android.os.Build;
 import org.appfresh.cache.InstanceMapping;
 import org.appfresh.exception.InvalidInstanceException;
 import org.appfresh.instance.annotation.ConfigurationReference;
-import org.appfresh.instance.annotation.InjectInstance;
+import org.appfresh.instance.annotation.Inject;
 import org.appfresh.instance.annotation.Instance;
 
 import java.lang.reflect.Field;
@@ -137,7 +137,7 @@ public class InstanceContext {
         try {
             Field[] fields = target.getClass().getDeclaredFields();
             for (Field field : fields) {
-                InjectInstance inject = field.getAnnotation(InjectInstance.class);
+                Inject inject = field.getAnnotation(Inject.class);
                 if (inject != null) {
                     String qualifier = inject.qualifier();
                     boolean accessibility = field.isAccessible();

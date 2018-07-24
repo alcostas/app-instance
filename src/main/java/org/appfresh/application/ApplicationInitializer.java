@@ -28,7 +28,7 @@ public class ApplicationInitializer extends Application {
         }
 
         try {
-            contentHolder = new InstanceContentHolder(new InstanceContextImpl(scanner.target()));
+            contentHolder = InstanceContentHolder.getInstanceContentHolder(new InstanceContextImpl(scanner.target()));
         } catch (InstantiationException | IllegalAccessException e) {
             e.printStackTrace();
         }

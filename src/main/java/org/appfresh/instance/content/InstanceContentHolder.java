@@ -8,9 +8,18 @@ import java.util.Map;
 public final class InstanceContentHolder {
 
     private final InstanceContext context;
+    private static InstanceContentHolder holder;
 
-    public InstanceContentHolder(InstanceContext instanceContext) {
+    private InstanceContentHolder(InstanceContext instanceContext) {
         context = instanceContext;
+    }
+
+    public static synchronized InstanceContentHolder getInstanceContentHolder(InstanceContext instanceContext) {
+        if (holder == null) {
+            if (instanceContext == null) throw new IllegalArgumentException("To initiate instance content holder instance context is mandatory");
+            holder = new InstanceContentHolder(instanceContext);
+        }
+        return holder;
     }
 
     public <T> T getInstance(String sourceName) {
