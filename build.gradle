@@ -13,3 +13,97 @@ dependencies {
     testCompile group: 'junit', name: 'junit', version: '4.12'
     implementation files('/home/alex/Android/Sdk/platforms/android-26/android.jar')
 }
+
+task compileAppInstance(type: JavaCompile) {
+
+    def packageScannerProperties = new Properties()
+    sourceSets.main.resources.srcDirs.each { sourceFile ->
+        file(sourceFile).eachFile { propertyFile ->
+            propertyFile.withInputStream { properties ->
+                packageScannerProperties.load(properties)
+            }
+        }
+    }
+
+    def packageScanner = packageScannerProperties.get("app.instance.package.inject.scanner")
+    // proceed only if the property contains the package scanner
+    if (packageScanner) {
+        def nextSources = [] as List<File>
+        def temporaryDir = compileJava.temporaryDir
+
+
+        compileJava.source.files.each { sourceFile ->
+            if (sourceFile.name.endsWith(".java")) {
+                String line
+                String packageName = null
+                def reader = new BufferedReader(new FileReader(sourceFile))
+                while ((line = reader.readLine()) != null) {
+                    if (line.trim().isEmpty()) continue
+                    if (line.startsWith("package")) {
+                        packageName = line.replaceFirst("package ", "").replaceAll(";", "")
+                    }
+                    break
+                }
+                reader.close()
+                if (packageName && packageName.startsWith(packageScanner)) {
+                    println "Processing class: ${sourceFile.name}"
+                    def classDirectory = "${temporaryDir}/${packageName.replaceAll("\\.", "/")}/${sourceFile.name}"
+                    def newClassDirectory = temporaryDir
+                    packageName.split("\\.").each {
+                        newClassDirectory = "${newClassDirectory}/${it}"
+                        def file = new File(newClassDirectory)
+                        file.mkdir()
+                    }
+
+                    def nextFile = new File(classDirectory)
+                    nextFile.createNewFile()
+                    def withoutDefaultConstructor = true
+                    def containsAnnotation = false
+                    nextFile.withPrintWriter { out ->
+                        sourceFile.eachLine { classLine ->
+                            if (!containsAnnotation && classLine.replaceAll("\\s+", "") == "@InstanceTarget") {
+                                containsAnnotation = true
+                            }
+                            if (containsAnnotation && classLine.replaceAll("\\s+", "").startsWith("public${sourceFile.name.replace(".java", "")}(")) {
+                                withoutDefaultConstructor = false
+                                def inSameLine = false
+                                if (classLine.endsWith("}")) {
+                                    classLine = classLine.replace("}", "")
+                                    inSameLine = true
+                                }
+                                out.println(classLine)
+                                out.println("org.appfresh.instance.content.InstanceContentHolder.getInstanceContentHolder().injectInstances(this);")
+                                if (inSameLine) {
+                                    out.println("}")
+                                }
+                            } else {
+                                out.println(classLine)
+                            }
+                        }
+                    }
+                    if (withoutDefaultConstructor && containsAnnotation) {
+                        def withoutConstructorReader = new BufferedReader(new FileReader(nextFile))
+                        def withoutConstructorLine
+                        def nextLines = [] as List<String>
+                        while ((withoutConstructorLine = withoutConstructorReader.readLine()) != null) {
+                            nextLines.add(withoutConstructorLine)
+                        }
+                        withoutConstructorReader.close()
+                        nextLines[nextLines.size() - 1] = "public ${sourceFile.name.replace(".java", "")} () {org.appfresh.instance.content.InstanceContentHolder.getInstanceContentHolder().injectInstances(this);}}"
+                        nextFile.withPrintWriter { out ->
+                            nextLines.each {
+                                out.println(it)
+                            }
+                        }
+                    }
+                    nextSources.add(nextFile)
+                } else {
+                    nextSources.add(sourceFile)
+                }
+            } else {
+                nextSources.add(sourceFile)
+            }
+        }
+        compileJava.source = nextSources
+    }
+}

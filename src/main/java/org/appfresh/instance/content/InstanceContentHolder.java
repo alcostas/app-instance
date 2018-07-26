@@ -22,6 +22,11 @@ public final class InstanceContentHolder {
         return holder;
     }
 
+    public static InstanceContentHolder getInstanceContentHolder() {
+        if (holder == null) throw new IllegalStateException("Instance content holder was not initialized");
+        return holder;
+    }
+
     public <T> T getInstance(String sourceName) {
         return context.getInstance(sourceName);
     }
